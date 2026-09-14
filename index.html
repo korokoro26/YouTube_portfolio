@@ -18,6 +18,9 @@
   <!-- Vue 3 -->
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 
+  <!-- Supabase JS Client -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
   <style>
     html {
       scroll-behavior: smooth;
@@ -70,7 +73,7 @@
         </div>
 
         <div class="flex items-center space-x-2.5">
-          <!-- 確実に出るヘッダー登録ボタン -->
+          <!-- ヘッダー登録ボタン -->
           <a 
             :href="subscribeUrl"
             target="_blank"
@@ -167,7 +170,7 @@
             
             <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">{{ currentItem.title }}</h2>
 
-            <!-- 確実に表示されるチャンネル登録＆誘導バナー -->
+            <!-- チャンネル登録＆誘導バナー -->
             <div class="bg-gradient-to-r from-red-600 to-rose-700 text-white rounded-2xl p-5 sm:p-6 shadow-md flex flex-col sm:flex-row items-center justify-between gap-5">
               <div class="space-y-1 text-center sm:text-left">
                 <h4 class="text-lg font-bold flex items-center justify-center sm:justify-start gap-2">
@@ -180,7 +183,6 @@
               </div>
 
               <div class="flex flex-wrap items-center justify-center gap-3">
-                <!-- 登録ボタン（白地・高CTR） -->
                 <a 
                   :href="subscribeUrl" 
                   target="_blank" 
@@ -190,7 +192,6 @@
                   <span>チャンネル登録する</span>
                 </a>
 
-                <!-- YouTubeで直接開くボタン -->
                 <a 
                   :href="'https://www.youtube.com/watch?v=' + currentItem.youtubeId" 
                   target="_blank" 
@@ -290,7 +291,7 @@
         </div>
       </section>
 
-      <!-- 2. ポートフォリオ一覧画面 -->
+      <!-- 2. ポートフォリオ一覧画面（毎回ランダム順） -->
       <section v-else class="space-y-6">
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-gray-200">
           <div>
@@ -418,11 +419,11 @@
     <footer class="mt-8 border-t border-gray-200 bg-white text-xs text-gray-400 py-4 px-4 text-center">
       <div class="flex items-center justify-center space-x-4">
         <span>&copy; YouTube Portfolio Hub</span>
-        <span class="opacity-40 font-mono">v1.1.6</span>
+        <span class="opacity-40 font-mono">v1.2.0 (Supabase)</span>
       </div>
     </footer>
 
-    <!-- チャンネル設定モーダル (編集モード時に登録URLを変更可能) -->
+    <!-- チャンネル設定モーダル -->
     <div 
       v-if="channelSettingsModal.isOpen" 
       class="fixed inset-0 z-50 flex items-center justify-center p-4 glass-backdrop">
@@ -445,7 +446,7 @@
             placeholder="例: https://www.youtube.com/@yourname または UCxxxx..." 
             class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
           <p class="text-[11px] text-gray-400 leading-relaxed">
-            ※入力したチャンネルに対して「登録確認ダイアログ付きリンク」が自動生成されます。
+            ※Supabaseの `app_settings` テーブルへ同期保存されます。
           </p>
         </div>
 
@@ -457,8 +458,10 @@
           </button>
           <button 
             @click="saveChannelSettings" 
+            :disabled="channelSettingsModal.isSaving"
             class="min-touch px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-full text-sm font-semibold shadow-sm">
-            保存する
+            <span v-if="channelSettingsModal.isSaving">保存中...</span>
+            <span v-else>保存する</span>
           </button>
         </div>
       </div>
@@ -596,57 +599,18 @@
   </div>
 
   <script>
-    const DB_NAME = 'yt_portfolio_db';
-    const DB_VERSION = 2;
-    const STORE_NAME = 'videos';
+    // ==========================================================
+    // 1. Supabase 初期設定
+    // ==========================================================
+    // Supabaseの「Project Settings」>「API」から取得した値を設定してください
+    const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+    const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
 
-    function initDB() {
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, DB_VERSION);
-        req.onupgradeneeded = (e) => {
-          const db = e.target.result;
-          if (!db.objectStoreNames.contains(STORE_NAME)) {
-            db.createObjectStore(STORE_NAME, { keyPath: 'slug' });
-          }
-        };
-        req.onsuccess = (e) => resolve(e.target.result);
-        req.onerror = (e) => reject('IndexedDB接続失敗: ' + e.target.error);
-      });
-    }
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    async function dbGetAll() {
-      const db = await initDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readonly');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = () => reject('データ読み込み失敗');
-      });
-    }
-
-    async function dbPut(item) {
-      const db = await initDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.put(item);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject('データ保存失敗');
-      });
-    }
-
-    async function dbDelete(slug) {
-      const db = await initDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.delete(slug);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject('データ削除失敗');
-      });
-    }
-
+    // ==========================================================
+    // 2. Vue 3 アプリケーション本体
+    // ==========================================================
     const { createApp, ref, reactive, computed, onMounted, nextTick } = Vue;
 
     createApp({
@@ -660,21 +624,18 @@
         const modalBox = ref(null);
         const previewIframe = ref(null);
 
-        // チャンネル設定管理（ローカルストレージで保存）
-        const channelRawInput = ref(localStorage.getItem('yt_hub_channel_url') || '');
-
+        // チャンネル設定（Supabaseの app_settings と同期）
+        const channelRawInput = ref('');
         const channelSettingsModal = reactive({
           isOpen: false,
-          inputUrl: channelRawInput.value
+          isSaving: false,
+          inputUrl: ''
         });
 
-        // 登録確認ダイアログ（?sub_confirmation=1）を自動付与した安全なURLを算出
+        // 登録URLの生成
         const subscribeUrl = computed(() => {
           const raw = channelRawInput.value.trim();
-          if (!raw) {
-            // 未設定時はYouTubeトップへ
-            return 'https://www.youtube.com/';
-          }
+          if (!raw) return 'https://www.youtube.com/';
 
           let base = raw;
           if (base.startsWith('UC') && base.length === 24) {
@@ -685,7 +646,6 @@
             base = `https://www.youtube.com/@${base}`;
           }
 
-          // sub_confirmationパラメータを付与
           return base.includes('?') 
             ? `${base}&sub_confirmation=1` 
             : `${base}?sub_confirmation=1`;
@@ -696,10 +656,24 @@
           channelSettingsModal.isOpen = true;
         };
 
-        const saveChannelSettings = () => {
-          channelRawInput.value = channelSettingsModal.inputUrl.trim();
-          localStorage.setItem('yt_hub_channel_url', channelRawInput.value);
-          channelSettingsModal.isOpen = false;
+        // Supabaseへチャンネル設定を保存
+        const saveChannelSettings = async () => {
+          channelSettingsModal.isSaving = true;
+          try {
+            const val = channelSettingsModal.inputUrl.trim();
+            const { error } = await supabase
+              .from('app_settings')
+              .upsert({ key: 'channel_url', value: val });
+
+            if (error) throw error;
+
+            channelRawInput.value = val;
+            channelSettingsModal.isOpen = false;
+          } catch (err) {
+            alert('チャンネル設定の保存に失敗しました: ' + err.message);
+          } finally {
+            channelSettingsModal.isSaving = false;
+          }
         };
 
         const authModal = reactive({
@@ -721,6 +695,7 @@
           }
         });
 
+        // Fisher-Yates アルゴリズムによるランダムシャッフル
         const shuffleArray = (array) => {
           const arr = [...array];
           for (let i = arr.length - 1; i > 0; i--) {
@@ -893,13 +868,45 @@
             : `${processed}${autoHeightScript}`;
         };
 
+        // ==========================================================
+        // 3. Supabase からのデータ取得
+        // ==========================================================
         const loadData = async () => {
           isLoading.value = true;
           try {
-            items.value = await dbGetAll();
+            // videos テーブルから全件取得
+            const { data: videoData, error: videoError } = await supabase
+              .from('videos')
+              .select('*')
+              .order('updated_at', { ascending: false });
+
+            if (videoError) throw videoError;
+
+            // スネークケース（DB）からキャメルケース（Vue）へマッピング
+            items.value = (videoData || []).map(row => ({
+              slug: row.slug,
+              youtubeId: row.youtube_id,
+              title: row.title,
+              tags: row.tags || [],
+              description: row.description,
+              updatedAt: row.updated_at
+            }));
+
+            // app_settings テーブルからチャンネル登録URLを取得
+            const { data: settingData, error: settingError } = await supabase
+              .from('app_settings')
+              .select('value')
+              .eq('key', 'channel_url')
+              .maybeSingle();
+
+            if (!settingError && settingData) {
+              channelRawInput.value = settingData.value || '';
+            }
+
             randomizeItems();
           } catch (err) {
-            alert('データ取得に失敗しました: ' + err);
+            console.error(err);
+            alert('Supabase接続エラー: ' + (err.message || 'データ取得に失敗しました'));
           } finally {
             isLoading.value = false;
             nextTick(() => lucide.createIcons());
@@ -949,6 +956,9 @@
           }
         };
 
+        // ==========================================================
+        // 4. Supabase への保存・更新（Upsert）
+        // ==========================================================
         const saveItem = async () => {
           const ytId = extractYouTubeId(modal.form.youtubeInput);
           if (!ytId || ytId.length !== 11) {
@@ -968,37 +978,50 @@
                 .filter(t => t.length > 0)
             : [];
 
-          const record = {
+          const dbPayload = {
             slug: slug,
-            youtubeId: ytId,
+            youtube_id: ytId,
             title: modal.form.title.trim(),
             tags: tags,
-            description: modal.form.description.trim(),
-            updatedAt: new Date().toISOString()
+            description: modal.form.description.trim()
           };
 
           modal.isSubmitting = true;
           try {
-            await dbPut(record);
+            const { error } = await supabase
+              .from('videos')
+              .upsert(dbPayload);
+
+            if (error) throw error;
+
             await loadData();
             closeModal();
           } catch (err) {
-            alert('保存に失敗しました: ' + err);
+            alert('Supabaseへの保存に失敗しました: ' + err.message);
           } finally {
             modal.isSubmitting = false;
           }
         };
 
+        // ==========================================================
+        // 5. Supabase からの削除
+        // ==========================================================
         const confirmDelete = async (slug) => {
           if (confirm('本当にこの動画ページを削除しますか？')) {
             try {
-              await dbDelete(slug);
+              const { error } = await supabase
+                .from('videos')
+                .delete()
+                .eq('slug', slug);
+
+              if (error) throw error;
+
               if (currentSlug.value === slug) {
                 navigateToList();
               }
               await loadData();
             } catch (err) {
-              alert('削除に失敗しました: ' + err);
+              alert('削除に失敗しました: ' + err.message);
             }
           }
         };
