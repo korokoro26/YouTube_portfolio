@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>YouTube Portfolio Hub</title>
+  
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="YT Portfolio">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Vue 3 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+
+  <style>
+    html {
+      scroll-behavior: smooth;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      -webkit-overflow-scrolling: touch;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    .min-touch {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .glass-backdrop {
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+  <div id="app" class="min-h-screen flex flex-col justify-between">
+    
+    <!-- ヘッダー -->
+    <header class="sticky top-0 z-30 bg-white/85 backdrop-blur-md border-b border-gray-200">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+        <div class="flex items-center space-x-3 cursor-pointer" @click="navigateToList">
+          <div class="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center text-white shadow-sm">
+            <i data-lucide="play" class="w-5 h-5 fill-current"></i>
+          </div>
+          <div>
+            <h1 class="font-bold text-lg leading-tight tracking-tight">Channel Hub</h1>
+            <span class="text-xs text-gray-400">Portfolio</span>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2.5">
+          <!-- 確実に出るヘッダー登録ボタン -->
+          <a 
+            :href="subscribeUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="min-touch inline-flex items-center space-x-1.5 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold px-3.5 py-1.5 rounded-full text-xs transition-all shadow-sm">
+            <i data-lucide="bell" class="w-3.5 h-3.5"></i>
+            <span>登録する</span>
+          </a>
+
+          <!-- チャンネル設定ボタン (編集モード時のみ表示) -->
+          <button 
+            v-if="isEditMode"
+            @click="openChannelSettingsModal"
+            class="min-touch p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-full transition-colors"
+            title="チャンネル登録先URLの設定">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+          </button>
+
+          <!-- 閲覧/編集 モード切替（パスワード: 0122） -->
+          <button 
+            @click="handleEditToggleClick" 
+            class="min-touch px-3 py-2 text-sm font-medium rounded-full flex items-center space-x-1.5 transition-all"
+            :class="isEditMode ? 'bg-red-50 text-red-600 ring-1 ring-red-200' : 'text-gray-500 hover:bg-gray-100'">
+            <i :data-lucide="isEditMode ? 'unlock' : 'lock'" class="w-4 h-4"></i>
+            <span class="hidden md:inline">{{ isEditMode ? '編集モード' : '閲覧中' }}</span>
+          </button>
+
+          <!-- 新規動画作成ボタン -->
+          <button 
+            v-if="isEditMode"
+            @click="openCreateModal" 
+            class="min-touch bg-red-600 hover:bg-red-700 active:scale-95 transition-all text-white px-4 py-2 rounded-full font-medium text-sm flex items-center space-x-1.5 shadow-sm">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>新規登録</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="flex-grow max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      
+      <!-- 1. 単一動画ページ -->
+      <section v-if="currentSlug && currentItem" class="space-y-8">
+        <div class="flex items-center justify-between">
+          <button 
+            @click="navigateToList" 
+            class="min-touch inline-flex items-center space-x-1 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            <span>動画一覧に戻る</span>
+          </button>
+          
+          <div v-if="isEditMode" class="flex items-center space-x-2">
+            <button 
+              @click="openEditModal(currentItem)" 
+              class="min-touch p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
+              title="編集">
+              <i data-lucide="edit-3" class="w-5 h-5"></i>
+            </button>
+            <button 
+              @click="confirmDelete(currentItem.slug)" 
+              class="min-touch p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+              title="削除">
+              <i data-lucide="trash-2" class="w-5 h-5"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-3xl overflow-hidden shadow-sm">
+          <!-- プレイヤー（エラー153対策） -->
+          <div class="relative w-full aspect-video bg-black">
+            <iframe 
+              :src="getEmbedUrl(currentItem.youtubeId)" 
+              class="absolute inset-0 w-full h-full border-0" 
+              referrerpolicy="strict-origin-when-cross-origin"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+              allowfullscreen>
+            </iframe>
+          </div>
+
+          <div class="p-6 sm:p-8 space-y-8">
+            <!-- タグ一覧 -->
+            <div class="flex flex-wrap items-center gap-2">
+              <span 
+                v-for="tag in currentItem.tags" 
+                :key="tag" 
+                class="text-xs font-semibold px-3 py-1 bg-red-50 text-red-700 border border-red-100 rounded-full">
+                #{{ tag }}
+              </span>
+              <span v-if="!currentItem.tags || currentItem.tags.length === 0" class="text-xs text-gray-400">
+                タグなし
+              </span>
+            </div>
+            
+            <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">{{ currentItem.title }}</h2>
+
+            <!-- 確実に表示されるチャンネル登録＆誘導バナー -->
+            <div class="bg-gradient-to-r from-red-600 to-rose-700 text-white rounded-2xl p-5 sm:p-6 shadow-md flex flex-col sm:flex-row items-center justify-between gap-5">
+              <div class="space-y-1 text-center sm:text-left">
+                <h4 class="text-lg font-bold flex items-center justify-center sm:justify-start gap-2">
+                  <i data-lucide="bell" class="w-5 h-5"></i>
+                  最新動画・限定情報をいち早くチェック！
+                </h4>
+                <p class="text-xs text-red-100">
+                  ワンタップで確認ダイアログが開き、チャンネル登録を完了できます。
+                </p>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-center gap-3">
+                <!-- 登録ボタン（白地・高CTR） -->
+                <a 
+                  :href="subscribeUrl" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="min-touch whitespace-nowrap bg-white text-red-600 hover:bg-gray-100 font-bold px-6 py-3 rounded-full text-sm shadow-md transition-all active:scale-95 flex items-center space-x-2">
+                  <i data-lucide="bell-ring" class="w-4 h-4 text-red-600"></i>
+                  <span>チャンネル登録する</span>
+                </a>
+
+                <!-- YouTubeで直接開くボタン -->
+                <a 
+                  :href="'https://www.youtube.com/watch?v=' + currentItem.youtubeId" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="min-touch whitespace-nowrap bg-black/20 hover:bg-black/30 text-white font-medium px-4 py-3 rounded-full text-xs transition-all flex items-center space-x-1.5 border border-white/20">
+                  <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                  <span>YouTubeで開く</span>
+                </a>
+              </div>
+            </div>
+            
+            <!-- コンテンツ詳細エリア -->
+            <div class="pt-4 border-t border-gray-100">
+              <iframe 
+                ref="previewIframe"
+                :srcdoc="injectResponsiveScript(currentItem.description)" 
+                sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+                scrolling="no"
+                class="w-full border-0 bg-transparent block"
+                style="height: 300px; overflow: hidden;"
+                loading="lazy">
+              </iframe>
+            </div>
+
+            <!-- SNS共有 & リンクコピーボタン群 -->
+            <div class="pt-6 border-t border-gray-100 flex flex-wrap items-center gap-2.5">
+              <button 
+                @click="copyShareLink(currentItem.slug)" 
+                class="min-touch inline-flex items-center justify-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all active:scale-95 shadow-sm">
+                <i data-lucide="share-2" class="w-4 h-4"></i>
+                <span>このページのリンクをコピー</span>
+              </button>
+
+              <button 
+                @click="shareToX(currentItem)" 
+                class="min-touch inline-flex items-center justify-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all active:scale-95 shadow-sm">
+                <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 24.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                <span>X で共有</span>
+              </button>
+
+              <button 
+                @click="shareToLine(currentItem)" 
+                class="min-touch inline-flex items-center justify-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all active:scale-95 shadow-sm">
+                <svg class="w-4 h-4 fill-current text-[#06C755]" viewBox="0 0 24 24"><path d="M24 10.304c0-5.369-5.383-9.738-12-9.738-6.616 0-12 4.369-12 9.738 0 4.814 4.269 8.846 10.036 9.608.391.084.922.258 1.057.592.122.303.079.778.039 1.085l-.171 1.027c-.053.303-.242 1.186 1.039.645 1.281-.54 6.911-4.069 9.428-6.967 1.739-1.907 2.572-3.844 2.572-5.99"/></svg>
+                <span>LINE</span>
+              </button>
+
+              <button 
+                @click="shareToFacebook(currentItem)" 
+                class="min-touch inline-flex items-center justify-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all active:scale-95 shadow-sm">
+                <svg class="w-4 h-4 fill-current text-[#1877F2]" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                <span>Facebook</span>
+              </button>
+
+              <button 
+                @click="shareToHatena(currentItem)" 
+                class="min-touch inline-flex items-center justify-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium px-5 py-2.5 rounded-full text-xs sm:text-sm transition-all active:scale-95 shadow-sm">
+                <span class="font-black text-sm tracking-tighter text-[#00A4DE]">B!</span>
+                <span>はてブ</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 関連動画レコメンド -->
+        <div v-if="relatedItems.length > 0" class="space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <i data-lucide="sparkles" class="w-5 h-5 text-red-600"></i>
+              合わせて見たいおすすめ動画
+            </h3>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div 
+              v-for="rel in relatedItems" 
+              :key="rel.slug"
+              @click="navigateToDetail(rel.slug)"
+              class="group bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md cursor-pointer transition-all">
+              <div class="relative aspect-video bg-gray-100 overflow-hidden">
+                <img 
+                  :src="getThumbnailUrl(rel.youtubeId)" 
+                  :alt="rel.title" 
+                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+              </div>
+              <div class="p-3.5 space-y-1.5">
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="t in (rel.tags || []).slice(0, 2)" :key="t" class="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                    #{{ t }}
+                  </span>
+                </div>
+                <h4 class="font-bold text-sm text-gray-900 line-clamp-1 group-hover:text-red-600 transition-colors">
+                  {{ rel.title }}
+                </h4>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. ポートフォリオ一覧画面 -->
+      <section v-else class="space-y-6">
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-gray-200">
+          <div>
+            <h2 class="text-2xl font-bold text-gray-900 tracking-tight">動画ポートフォリオ</h2>
+            <p class="text-sm text-gray-500 mt-1">動画サムネイル、タグ、詳細ページを一覧で閲覧・検索できます。</p>
+          </div>
+          <div class="text-xs text-gray-400">
+            登録数: {{ filteredItems.length }} / {{ items.length }} 件
+          </div>
+        </div>
+
+        <!-- タグ検索タブバー -->
+        <div v-if="allTags.length > 0" class="flex items-center space-x-2 overflow-x-auto no-scrollbar py-2">
+          <button 
+            @click="selectedTag = 'all'"
+            class="min-touch whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold transition-all"
+            :class="selectedTag === 'all' ? 'bg-red-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'">
+            すべて ({{ items.length }})
+          </button>
+          <button 
+            v-for="tag in allTags" 
+            :key="tag"
+            @click="selectedTag = tag"
+            class="min-touch whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold transition-all"
+            :class="selectedTag === tag ? 'bg-red-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'">
+            #{{ tag }} ({{ getTagCount(tag) }})
+          </button>
+        </div>
+
+        <!-- スケルトン -->
+        <div v-if="isLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div v-for="n in 3" :key="n" class="bg-white rounded-2xl border border-gray-200 overflow-hidden animate-pulse">
+            <div class="bg-gray-200 aspect-video w-full"></div>
+            <div class="p-4 space-y-2">
+              <div class="h-5 bg-gray-200 rounded w-3/4"></div>
+              <div class="h-4 bg-gray-100 rounded w-full"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- カード一覧 -->
+        <div v-else-if="filteredItems.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div 
+            v-for="item in filteredItems" 
+            :key="item.slug" 
+            class="group bg-white rounded-3xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-lg transition-all flex flex-col justify-between">
+            
+            <div class="cursor-pointer" @click="navigateToDetail(item.slug)">
+              <div class="relative aspect-video bg-gray-100 overflow-hidden">
+                <img 
+                  :src="getThumbnailUrl(item.youtubeId)" 
+                  :alt="item.title"
+                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  loading="lazy">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+                  <span class="text-white text-xs font-semibold flex items-center gap-1">
+                    <i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i> 詳細ページを見る
+                  </span>
+                </div>
+              </div>
+
+              <div class="p-5 space-y-3">
+                <div class="flex flex-wrap gap-1.5">
+                  <span 
+                    v-for="tag in (item.tags || []).slice(0, 3)" 
+                    :key="tag" 
+                    @click.stop="selectedTag = tag"
+                    class="text-[11px] font-medium bg-gray-100 text-gray-700 hover:bg-red-50 hover:text-red-600 px-2.5 py-1 rounded-full transition-colors">
+                    #{{ tag }}
+                  </span>
+                  <span v-if="item.tags && item.tags.length > 3" class="text-[11px] text-gray-400 self-center">
+                    +{{ item.tags.length - 3 }}
+                  </span>
+                </div>
+
+                <h3 class="font-bold text-gray-900 text-base group-hover:text-red-600 transition-colors line-clamp-2 leading-snug">
+                  {{ item.title }}
+                </h3>
+              </div>
+            </div>
+
+            <div class="px-5 py-3.5 bg-gray-50/80 border-t border-gray-100 flex items-center justify-between mt-auto">
+              <button 
+                @click="navigateToDetail(item.slug)" 
+                class="min-touch text-xs font-bold text-red-600 hover:text-red-700 flex items-center space-x-1">
+                <span>詳細ページを開く</span>
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+              </button>
+              
+              <div v-if="isEditMode" class="flex items-center space-x-1">
+                <button 
+                  @click="openEditModal(item)" 
+                  class="min-touch p-2 text-gray-500 hover:text-gray-800 rounded-full" 
+                  title="編集">
+                  <i data-lucide="edit-3" class="w-4 h-4"></i>
+                </button>
+                <button 
+                  @click="confirmDelete(item.slug)" 
+                  class="min-touch p-2 text-red-500 hover:text-red-700 rounded-full" 
+                  title="削除">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 空状態 -->
+        <div v-else class="text-center py-16 bg-white border border-dashed border-gray-300 rounded-3xl p-6">
+          <i data-lucide="video" class="w-12 h-12 text-gray-300 mx-auto mb-3"></i>
+          <h3 class="text-base font-semibold text-gray-800">一致する動画が見つかりませんでした</h3>
+          <p class="text-sm text-gray-500 max-w-sm mx-auto mt-1 mb-6">別のタグを選択するか、新しい動画を登録してください。</p>
+          <button 
+            v-if="isEditMode"
+            @click="openCreateModal" 
+            class="min-touch inline-flex items-center space-x-2 bg-red-600 text-white px-5 py-2.5 rounded-full font-medium text-sm shadow-sm active:scale-95 transition-all">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>動画を登録する</span>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- フッター -->
+    <footer class="mt-8 border-t border-gray-200 bg-white text-xs text-gray-400 py-4 px-4 text-center">
+      <div class="flex items-center justify-center space-x-4">
+        <span>&copy; YouTube Portfolio Hub</span>
+        <span class="opacity-40 font-mono">v1.1.6</span>
+      </div>
+    </footer>
+
+    <!-- チャンネル設定モーダル (編集モード時に登録URLを変更可能) -->
+    <div 
+      v-if="channelSettingsModal.isOpen" 
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 glass-backdrop">
+      <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-gray-100 p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+          <h3 class="text-base font-bold text-gray-900 flex items-center gap-2">
+            <i data-lucide="bell" class="w-4 h-4 text-red-600"></i>
+            チャンネル登録先の設定
+          </h3>
+          <button @click="channelSettingsModal.isOpen = false" class="min-touch text-gray-400 hover:text-gray-600">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <div class="space-y-3">
+          <label class="block text-xs font-semibold text-gray-600">YouTubeチャンネルURL または @ハンドル名</label>
+          <input 
+            v-model="channelSettingsModal.inputUrl" 
+            type="text" 
+            placeholder="例: https://www.youtube.com/@yourname または UCxxxx..." 
+            class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
+          <p class="text-[11px] text-gray-400 leading-relaxed">
+            ※入力したチャンネルに対して「登録確認ダイアログ付きリンク」が自動生成されます。
+          </p>
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-2">
+          <button 
+            @click="channelSettingsModal.isOpen = false" 
+            class="min-touch px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-full font-medium">
+            キャンセル
+          </button>
+          <button 
+            @click="saveChannelSettings" 
+            class="min-touch px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-full text-sm font-semibold shadow-sm">
+            保存する
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- パスワード認証モーダル (0122) -->
+    <div 
+      v-if="authModal.isOpen" 
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 glass-backdrop">
+      <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl border border-gray-100 p-6 space-y-4">
+        <div class="text-center space-y-1">
+          <div class="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
+            <i data-lucide="lock" class="w-6 h-6"></i>
+          </div>
+          <h3 class="text-lg font-bold text-gray-900">編集者認証</h3>
+          <p class="text-xs text-gray-500">編集モードに切り替えるには暗証番号を入力してください。</p>
+        </div>
+
+        <form @submit.prevent="verifyPassword" class="space-y-4">
+          <div>
+            <input 
+              v-model="authModal.passwordInput" 
+              type="password" 
+              inputmode="numeric"
+              maxlength="4"
+              placeholder="4桁の暗証番号" 
+              autofocus
+              class="w-full text-center tracking-widest text-xl font-bold px-4 py-3 rounded-2xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              required>
+            <p v-if="authModal.errorMessage" class="text-xs text-red-500 mt-1.5 text-center font-medium">
+              {{ authModal.errorMessage }}
+            </p>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button 
+              type="button" 
+              @click="authModal.isOpen = false" 
+              class="min-touch flex-1 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-100 rounded-full font-medium transition-colors">
+              キャンセル
+            </button>
+            <button 
+              type="submit" 
+              class="min-touch flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-sm font-semibold transition-all shadow-sm">
+              解除
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 作成 / 編集モーダル -->
+    <div 
+      v-if="modal.isOpen" 
+      @click="handleBackdropClick"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 glass-backdrop">
+      
+      <div 
+        ref="modalBox"
+        class="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-gray-100 overflow-hidden p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        
+        <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+          <h3 class="text-lg font-bold text-gray-900">
+            {{ modal.mode === 'create' ? '動画ページの新規作成' : '動画ページの編集' }}
+          </h3>
+          <button 
+            @click="closeModal" 
+            class="min-touch text-gray-400 hover:text-gray-600 rounded-full flex items-center justify-center">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <form @submit.prevent="saveItem" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">YouTube URL または 動画ID</label>
+            <input 
+              v-model="modal.form.youtubeInput" 
+              type="text" 
+              placeholder="例: https://youtu.be/xxxxxx または dQw4w9WgXcQ" 
+              class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              required>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">動画タイトル</label>
+            <input 
+              v-model="modal.form.title" 
+              type="text" 
+              placeholder="ページに表示する見出し" 
+              class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              required>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">タグ (任意・カンマまたは空白で複数指定)</label>
+            <input 
+              v-model="modal.form.tagsInput" 
+              type="text" 
+              placeholder="例: 解説, チュートリアル, おすすめ" 
+              class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">
+              埋め込みHTMLコンテンツ (HTML/CSS/JS 完全内包・Shift + Enterで登録)
+            </label>
+            <textarea 
+              v-model="modal.form.description" 
+              @keydown.enter="handleTextareaEnter"
+              rows="6" 
+              placeholder="<!DOCTYPE html><html>...</html> などの完全なHTMLを入力できます" 
+              class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm font-mono text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-y"
+              required></textarea>
+          </div>
+
+          <div class="flex items-center justify-end space-x-2 pt-2">
+            <button 
+              type="button" 
+              @click="closeModal" 
+              class="min-touch px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-full transition-colors font-medium">
+              キャンセル
+            </button>
+            <button 
+              type="submit" 
+              :disabled="modal.isSubmitting"
+              class="min-touch px-6 py-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white rounded-full text-sm font-semibold transition-all shadow-sm flex items-center space-x-1.5">
+              <span v-if="modal.isSubmitting">保存中...</span>
+              <span v-else>{{ modal.mode === 'create' ? '作成' : '更新' }}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const DB_NAME = 'yt_portfolio_db';
+    const DB_VERSION = 2;
+    const STORE_NAME = 'videos';
+
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: 'slug' });
+          }
+        };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = (e) => reject('IndexedDB接続失敗: ' + e.target.error);
+      });
+    }
+
+    async function dbGetAll() {
+      const db = await initDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject('データ読み込み失敗');
+      });
+    }
+
+    async function dbPut(item) {
+      const db = await initDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.put(item);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject('データ保存失敗');
+      });
+    }
+
+    async function dbDelete(slug) {
+      const db = await initDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.delete(slug);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject('データ削除失敗');
+      });
+    }
+
+    const { createApp, ref, reactive, computed, onMounted, nextTick } = Vue;
+
+    createApp({
+      setup() {
+        const items = ref([]);
+        const randomOrderItems = ref([]);
+        const isLoading = ref(true);
+        const isEditMode = ref(false);
+        const currentSlug = ref('');
+        const selectedTag = ref('all');
+        const modalBox = ref(null);
+        const previewIframe = ref(null);
+
+        // チャンネル設定管理（ローカルストレージで保存）
+        const channelRawInput = ref(localStorage.getItem('yt_hub_channel_url') || '');
+
+        const channelSettingsModal = reactive({
+          isOpen: false,
+          inputUrl: channelRawInput.value
+        });
+
+        // 登録確認ダイアログ（?sub_confirmation=1）を自動付与した安全なURLを算出
+        const subscribeUrl = computed(() => {
+          const raw = channelRawInput.value.trim();
+          if (!raw) {
+            // 未設定時はYouTubeトップへ
+            return 'https://www.youtube.com/';
+          }
+
+          let base = raw;
+          if (base.startsWith('UC') && base.length === 24) {
+            base = `https://www.youtube.com/channel/${base}`;
+          } else if (base.startsWith('@')) {
+            base = `https://www.youtube.com/${base}`;
+          } else if (!base.startsWith('http://') && !base.startsWith('https://')) {
+            base = `https://www.youtube.com/@${base}`;
+          }
+
+          // sub_confirmationパラメータを付与
+          return base.includes('?') 
+            ? `${base}&sub_confirmation=1` 
+            : `${base}?sub_confirmation=1`;
+        });
+
+        const openChannelSettingsModal = () => {
+          channelSettingsModal.inputUrl = channelRawInput.value;
+          channelSettingsModal.isOpen = true;
+        };
+
+        const saveChannelSettings = () => {
+          channelRawInput.value = channelSettingsModal.inputUrl.trim();
+          localStorage.setItem('yt_hub_channel_url', channelRawInput.value);
+          channelSettingsModal.isOpen = false;
+        };
+
+        const authModal = reactive({
+          isOpen: false,
+          passwordInput: '',
+          errorMessage: ''
+        });
+
+        const modal = reactive({
+          isOpen: false,
+          isSubmitting: false,
+          mode: 'create',
+          form: {
+            slug: '',
+            youtubeInput: '',
+            title: '',
+            tagsInput: '',
+            description: ''
+          }
+        });
+
+        const shuffleArray = (array) => {
+          const arr = [...array];
+          for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+          }
+          return arr;
+        };
+
+        const randomizeItems = () => {
+          randomOrderItems.value = shuffleArray(items.value);
+        };
+
+        const extractYouTubeId = (input) => {
+          if (!input) return '';
+          const trimmed = input.trim();
+          const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+          const match = trimmed.match(regExp);
+          return (match && match[2].length === 11) ? match[2] : trimmed;
+        };
+
+        const getEmbedUrl = (ytId) => `https://www.youtube.com/embed/${ytId}?rel=0`;
+        const getThumbnailUrl = (ytId) => `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+
+        const allTags = computed(() => {
+          const set = new Set();
+          items.value.forEach(item => {
+            if (item.tags && Array.isArray(item.tags)) {
+              item.tags.forEach(t => set.add(t));
+            }
+          });
+          return Array.from(set);
+        });
+
+        const getTagCount = (tag) => {
+          return items.value.filter(i => i.tags && i.tags.includes(tag)).length;
+        };
+
+        const filteredItems = computed(() => {
+          const source = randomOrderItems.value.length > 0 ? randomOrderItems.value : items.value;
+          if (selectedTag.value === 'all') return source;
+          return source.filter(i => i.tags && i.tags.includes(selectedTag.value));
+        });
+
+        const currentItem = computed(() => {
+          return items.value.find(i => i.slug === currentSlug.value);
+        });
+
+        const relatedItems = computed(() => {
+          if (!currentItem.value) return [];
+          const curr = currentItem.value;
+          const currTags = curr.tags || [];
+
+          return items.value
+            .filter(i => i.slug !== curr.slug)
+            .sort((a, b) => {
+              const aOverlap = (a.tags || []).filter(t => currTags.includes(t)).length;
+              const bOverlap = (b.tags || []).filter(t => currTags.includes(t)).length;
+              return bOverlap - aOverlap;
+            })
+            .slice(0, 3);
+        });
+
+        const handleRouting = () => {
+          const hash = window.location.hash.replace('#/', '').replace('#', '');
+          currentSlug.value = hash;
+          window.scrollTo(0, 0);
+
+          if (!hash) {
+            randomizeItems();
+          }
+
+          nextTick(() => lucide.createIcons());
+        };
+
+        const navigateToDetail = (slug) => {
+          window.location.hash = `/${slug}`;
+        };
+
+        const navigateToList = () => {
+          window.location.hash = '';
+        };
+
+        const handleEditToggleClick = () => {
+          if (isEditMode.value) {
+            isEditMode.value = false;
+            nextTick(() => lucide.createIcons());
+          } else {
+            authModal.passwordInput = '';
+            authModal.errorMessage = '';
+            authModal.isOpen = true;
+            nextTick(() => lucide.createIcons());
+          }
+        };
+
+        const verifyPassword = () => {
+          if (authModal.passwordInput === '0122') {
+            isEditMode.value = true;
+            authModal.isOpen = false;
+            nextTick(() => lucide.createIcons());
+          } else {
+            authModal.errorMessage = 'パスワードが違います（0122）';
+            authModal.passwordInput = '';
+          }
+        };
+
+        const injectResponsiveScript = (htmlContent) => {
+          if (!htmlContent) return '';
+
+          let processed = htmlContent;
+
+          const viewportMeta = '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">';
+          if (!processed.includes('<meta name="viewport"')) {
+            if (processed.includes('<head>')) {
+              processed = processed.replace('<head>', `<head>${viewportMeta}`);
+            } else {
+              processed = `${viewportMeta}${processed}`;
+            }
+          }
+
+          const autoHeightScript = `
+            <style>
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+                background-color: transparent !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+              }
+              * {
+                box-sizing: border-box !important;
+                max-width: 100% !important;
+              }
+            </style>
+            <script>
+              (function() {
+                let lastHeight = 0;
+                function sendHeight() {
+                  const body = document.body;
+                  const html = document.documentElement;
+                  const height = Math.max(
+                    body ? body.scrollHeight : 0,
+                    body ? body.offsetHeight : 0,
+                    html ? html.clientHeight : 0,
+                    html ? html.scrollHeight : 0,
+                    html ? html.offsetHeight : 0
+                  );
+                  if (Math.abs(height - lastHeight) > 4) {
+                    lastHeight = height;
+                    window.parent.postMessage({ type: 'iframe-resize', height: height }, '*');
+                  }
+                }
+                window.addEventListener('load', () => {
+                  sendHeight();
+                  setTimeout(sendHeight, 150);
+                  setTimeout(sendHeight, 600);
+                });
+                window.addEventListener('resize', sendHeight);
+                if (window.ResizeObserver && document.body) {
+                  new ResizeObserver(sendHeight).observe(document.body);
+                }
+              })();
+            <\/script>
+          `;
+
+          return processed.includes('</body>') 
+            ? processed.replace('</body>', `${autoHeightScript}</body>`)
+            : `${processed}${autoHeightScript}`;
+        };
+
+        const loadData = async () => {
+          isLoading.value = true;
+          try {
+            items.value = await dbGetAll();
+            randomizeItems();
+          } catch (err) {
+            alert('データ取得に失敗しました: ' + err);
+          } finally {
+            isLoading.value = false;
+            nextTick(() => lucide.createIcons());
+          }
+        };
+
+        const openCreateModal = () => {
+          modal.mode = 'create';
+          modal.form = { 
+            slug: '', 
+            youtubeInput: '', 
+            title: '', 
+            tagsInput: '',
+            description: '<!DOCTYPE html>\n<html lang="ja">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <style>\n    body { font-family: sans-serif; padding: 10px; color: #333; line-height: 1.6; }\n    .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-top: 12px; }\n  </style>\n</head>\n<body>\n  <div class="box">\n    <h3>動画の補足・資料</h3>\n    <p>完全なHTMLを直接貼り付けると、スマホにも自動適合してシームレスに表示されます。</p>\n  </div>\n</body>\n</html>' 
+          };
+          modal.isOpen = true;
+          nextTick(() => lucide.createIcons());
+        };
+
+        const openEditModal = (item) => {
+          modal.mode = 'edit';
+          modal.form = {
+            slug: item.slug,
+            youtubeInput: item.youtubeId,
+            title: item.title,
+            tagsInput: (item.tags || []).join(', '),
+            description: item.description
+          };
+          modal.isOpen = true;
+          nextTick(() => lucide.createIcons());
+        };
+
+        const closeModal = () => {
+          modal.isOpen = false;
+        };
+
+        const handleBackdropClick = (e) => {
+          if (modalBox.value && !modalBox.value.contains(e.target)) {
+            closeModal();
+          }
+        };
+
+        const handleTextareaEnter = (e) => {
+          if (e.shiftKey) {
+            e.preventDefault();
+            saveItem();
+          }
+        };
+
+        const saveItem = async () => {
+          const ytId = extractYouTubeId(modal.form.youtubeInput);
+          if (!ytId || ytId.length !== 11) {
+            alert('有効なYouTube URLまたは11桁の動画IDを入力してください。');
+            return;
+          }
+
+          let slug = modal.mode === 'edit' ? modal.form.slug : ytId;
+          if (modal.mode === 'create' && items.value.some(i => i.slug === slug)) {
+            slug = `${ytId}-${Date.now().toString(36)}`;
+          }
+
+          const tags = modal.form.tagsInput
+            ? modal.form.tagsInput
+                .split(/[,\s]+/)
+                .map(t => t.replace(/^#/, '').trim())
+                .filter(t => t.length > 0)
+            : [];
+
+          const record = {
+            slug: slug,
+            youtubeId: ytId,
+            title: modal.form.title.trim(),
+            tags: tags,
+            description: modal.form.description.trim(),
+            updatedAt: new Date().toISOString()
+          };
+
+          modal.isSubmitting = true;
+          try {
+            await dbPut(record);
+            await loadData();
+            closeModal();
+          } catch (err) {
+            alert('保存に失敗しました: ' + err);
+          } finally {
+            modal.isSubmitting = false;
+          }
+        };
+
+        const confirmDelete = async (slug) => {
+          if (confirm('本当にこの動画ページを削除しますか？')) {
+            try {
+              await dbDelete(slug);
+              if (currentSlug.value === slug) {
+                navigateToList();
+              }
+              await loadData();
+            } catch (err) {
+              alert('削除に失敗しました: ' + err);
+            }
+          }
+        };
+
+        const getShareUrl = (slug) => `${window.location.origin}${window.location.pathname}#/${slug}`;
+
+        const copyShareLink = (slug) => {
+          const url = getShareUrl(slug);
+          navigator.clipboard.writeText(url).then(() => {
+            alert('動画ページのリンクをクリップボードにコピーしました！\n' + url);
+          }).catch(() => {
+            alert('URLのコピーに失敗しました。');
+          });
+        };
+
+        const shareToX = (item) => {
+          const url = encodeURIComponent(getShareUrl(item.slug));
+          const text = encodeURIComponent(`【${item.title}】\n`);
+          window.open(`https://twitter.com/intent/tweet?url=${url}&text=${text}`, '_blank', 'width=600,height=450');
+        };
+
+        const shareToLine = (item) => {
+          const url = encodeURIComponent(getShareUrl(item.slug));
+          window.open(`https://social-plugins.line.me/lineit/share?url=${url}`, '_blank', 'width=600,height=500');
+        };
+
+        const shareToFacebook = (item) => {
+          const url = encodeURIComponent(getShareUrl(item.slug));
+          window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank', 'width=600,height=500');
+        };
+
+        const shareToHatena = (item) => {
+          const url = encodeURIComponent(getShareUrl(item.slug));
+          window.open(`https://b.hatena.ne.jp/entry/${url}`, '_blank', 'width=600,height=500');
+        };
+
+        onMounted(async () => {
+          window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'iframe-resize') {
+              if (previewIframe.value && event.data.height > 0) {
+                const currentH = parseInt(previewIframe.value.style.height || '0', 10);
+                if (Math.abs(currentH - event.data.height) > 4) {
+                  previewIframe.value.style.height = `${event.data.height}px`;
+                }
+              }
+            }
+          });
+
+          window.addEventListener('hashchange', handleRouting);
+          await loadData();
+          handleRouting();
+        });
+
+        return {
+          subscribeUrl,
+          channelSettingsModal,
+          openChannelSettingsModal,
+          saveChannelSettings,
+          items,
+          randomOrderItems,
+          isLoading,
+          isEditMode,
+          currentSlug,
+          currentItem,
+          selectedTag,
+          allTags,
+          getTagCount,
+          filteredItems,
+          relatedItems,
+          authModal,
+          modal,
+          modalBox,
+          previewIframe,
+          injectResponsiveScript,
+          getEmbedUrl,
+          getThumbnailUrl,
+          navigateToDetail,
+          navigateToList,
+          handleEditToggleClick,
+          verifyPassword,
+          openCreateModal,
+          openEditModal,
+          closeModal,
+          handleBackdropClick,
+          handleTextareaEnter,
+          saveItem,
+          confirmDelete,
+          copyShareLink,
+          shareToX,
+          shareToLine,
+          shareToFacebook,
+          shareToHatena
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
