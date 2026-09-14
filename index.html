@@ -71,7 +71,17 @@
             <i data-lucide="play" class="w-5 h-5 fill-current"></i>
           </div>
           <div>
-            <h1 class="font-bold text-lg leading-tight tracking-tight">Channel Hub</h1>
+            <div class="flex items-center space-x-2">
+              <h1 class="font-bold text-lg leading-tight tracking-tight">Channel Hub</h1>
+              <!-- 訪問者カウンター表示バッジ -->
+              <span 
+                v-if="visitCount !== null" 
+                class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-gray-100 text-gray-600 border border-gray-200"
+                title="総訪問者数">
+                <i data-lucide="eye" class="w-3 h-3 mr-1 text-gray-400"></i>
+                {{ visitCount.toLocaleString() }}
+              </span>
+            </div>
             <span class="text-xs text-gray-400">Portfolio</span>
           </div>
         </div>
@@ -418,7 +428,7 @@
     <footer class="mt-8 border-t border-gray-200 bg-white text-xs text-gray-400 py-4 px-4 text-center">
       <div class="flex items-center justify-center space-x-4">
         <span>&copy; YouTube Portfolio Hub</span>
-        <span class="opacity-40 font-mono">v1.2.2</span>
+        <span class="opacity-40 font-mono">v1.3.0</span>
       </div>
     </footer>
 
@@ -604,7 +614,6 @@
     const SUPABASE_URL = 'https://idlterzachxmjepkqldv.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkbHRlcnphY2h4bWplcGtxbGR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzODMxODUsImV4cCI6MjEwNDk1OTE4NX0.nzHoYzsntbrTprNBRFEEPT3skA3ilhtIZpUJ2CrPfA0';
 
-    // Safariでの重複変数宣言エラーを回避するため、グローバルと衝突しない別名で保持
     let sbClient = null;
 
     try {
@@ -635,6 +644,7 @@
         const selectedTag = ref('all');
         const modalBox = ref(null);
         const previewIframe = ref(null);
+        const visitCount = ref(null); // 訪問者カウント
 
         const channelRawInput = ref('');
         const channelSettingsModal = reactive({
@@ -686,6 +696,45 @@
             alert('チャンネル設定の保存に失敗しました: ' + err.message);
           } finally {
             channelSettingsModal.isSaving = false;
+          }
+        };
+
+        // 訪問者数の記録・取得（同セッション中のリロード連打による過剰カウントはsessionStorageで抑制）
+        const handleVisitorTracking = async () => {
+          if (!sbClient) return;
+
+          try {
+            const hasCounted = sessionStorage.getItem('yt_hub_visit_counted');
+
+            if (!hasCounted) {
+              // 初回アクセス時：SupabaseのRPCでアトミックに+1カウントアップ
+              const { data, error } = await sbClient.rpc('increment_visit_count');
+              if (!error && data !== null) {
+                visitCount.value = Number(data);
+                sessionStorage.setItem('yt_hub_visit_counted', 'true');
+              } else {
+                fetchCurrentVisitCount();
+              }
+            } else {
+              // 同セッション内での再読み込み時：現在の数値を読み込むだけ
+              fetchCurrentVisitCount();
+            }
+          } catch (err) {
+            console.warn('訪問者カウント処理エラー:', err);
+            fetchCurrentVisitCount();
+          }
+        };
+
+        const fetchCurrentVisitCount = async () => {
+          if (!sbClient) return;
+          const { data, error } = await sbClient
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'visit_count')
+            .maybeSingle();
+
+          if (!error && data) {
+            visitCount.value = parseInt(data.value, 10) || 0;
           }
         };
 
@@ -1083,10 +1132,12 @@
 
           window.addEventListener('hashchange', handleRouting);
           await loadData();
+          await handleVisitorTracking(); // 訪問者カウント実行
           handleRouting();
         });
 
         return {
+          visitCount,
           subscribeUrl,
           channelSettingsModal,
           openChannelSettingsModal,
