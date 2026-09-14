@@ -22,6 +22,11 @@
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
   <style>
+    /* Vue起動前の{{ }}や非表示要素のチラつき・露出を完全に防止 */
+    [v-cloak] {
+      display: none !important;
+    }
+
     html {
       scroll-behavior: smooth;
     }
@@ -57,7 +62,8 @@
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900 min-h-screen">
-  <div id="app" class="min-h-screen flex flex-col justify-between">
+  <!-- v-cloak を付与してVue初期化前の誤表示をブロック -->
+  <div id="app" v-cloak class="min-h-screen flex flex-col justify-between">
     
     <!-- ヘッダー -->
     <header class="sticky top-0 z-30 bg-white/85 backdrop-blur-md border-b border-gray-200">
@@ -116,6 +122,15 @@
     <!-- メインコンテンツ -->
     <main class="flex-grow max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
       
+      <!-- Supabase未設定警告バー -->
+      <div v-if="configError" class="mb-6 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-4 text-xs sm:text-sm flex items-start space-x-3">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"></i>
+        <div>
+          <p class="font-bold">Supabaseの接続設定が必要です</p>
+          <p class="mt-1 text-amber-700">HTMLファイル内の <code>SUPABASE_URL</code> と <code>SUPABASE_ANON_KEY</code> に、Project Settings > API から取得した値を入力してください。</p>
+        </div>
+      </div>
+
       <!-- 1. 単一動画ページ -->
       <section v-if="currentSlug && currentItem" class="space-y-8">
         <div class="flex items-center justify-between">
@@ -291,7 +306,7 @@
         </div>
       </section>
 
-      <!-- 2. ポートフォリオ一覧画面（毎回ランダム順） -->
+      <!-- 2. ポートフォリオ一覧画面 -->
       <section v-else class="space-y-6">
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-gray-200">
           <div>
@@ -403,7 +418,7 @@
         <div v-else class="text-center py-16 bg-white border border-dashed border-gray-300 rounded-3xl p-6">
           <i data-lucide="video" class="w-12 h-12 text-gray-300 mx-auto mb-3"></i>
           <h3 class="text-base font-semibold text-gray-800">一致する動画が見つかりませんでした</h3>
-          <p class="text-sm text-gray-500 max-w-sm mx-auto mt-1 mb-6">別のタグを選択するか、新しい動画を登録してください。</p>
+          <p class="text-sm text-gray-500 max-w-sm mx-auto mt-1 mb-6">新しい動画を登録するか、Supabaseの接続状況をご確認ください。</p>
           <button 
             v-if="isEditMode"
             @click="openCreateModal" 
@@ -419,7 +434,7 @@
     <footer class="mt-8 border-t border-gray-200 bg-white text-xs text-gray-400 py-4 px-4 text-center">
       <div class="flex items-center justify-center space-x-4">
         <span>&copy; YouTube Portfolio Hub</span>
-        <span class="opacity-40 font-mono">v1.2.0 (Supabase)</span>
+        <span class="opacity-40 font-mono">v1.2.1 (Supabase)</span>
       </div>
     </footer>
 
@@ -446,7 +461,7 @@
             placeholder="例: https://www.youtube.com/@yourname または UCxxxx..." 
             class="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
           <p class="text-[11px] text-gray-400 leading-relaxed">
-            ※Supabaseの `app_settings` テーブルへ同期保存されます。
+            ※Supabaseの <code>app_settings</code> テーブルへ保存されます。
           </p>
         </div>
 
@@ -600,13 +615,23 @@
 
   <script>
     // ==========================================================
-    // 1. Supabase 初期設定
+    // 1. Supabase 設定
     // ==========================================================
-    // Supabaseの「Project Settings」>「API」から取得した値を設定してください
-    const SUPABASE_URL = 'https://idlterzachxmjepkqldv.supabase.co/rest';
+    // Project Settings > API の「Project URL」と「anon public key」を入力してください
+    const SUPABASE_URL = 'https://idlterzachxmjepkqldv.supabase.co/rest/';
     const SUPABASE_ANON_KEY = 'sb_publishable_5PwRU21aoVijbTYanBIiOg_8aBWT5Ws';
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let supabaseClient = null;
+    let hasValidConfig = false;
+
+    try {
+      if (SUPABASE_URL.startsWith('https://') && !SUPABASE_URL.includes('YOUR_PROJECT_ID') && SUPABASE_ANON_KEY !== 'YOUR_ANON_KEY') {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        hasValidConfig = true;
+      }
+    } catch (e) {
+      console.warn('Supabase初期化警告:', e);
+    }
 
     // ==========================================================
     // 2. Vue 3 アプリケーション本体
@@ -615,6 +640,7 @@
 
     createApp({
       setup() {
+        const configError = ref(!hasValidConfig);
         const items = ref([]);
         const randomOrderItems = ref([]);
         const isLoading = ref(true);
@@ -624,7 +650,6 @@
         const modalBox = ref(null);
         const previewIframe = ref(null);
 
-        // チャンネル設定（Supabaseの app_settings と同期）
         const channelRawInput = ref('');
         const channelSettingsModal = reactive({
           isOpen: false,
@@ -632,7 +657,6 @@
           inputUrl: ''
         });
 
-        // 登録URLの生成
         const subscribeUrl = computed(() => {
           const raw = channelRawInput.value.trim();
           if (!raw) return 'https://www.youtube.com/';
@@ -656,12 +680,15 @@
           channelSettingsModal.isOpen = true;
         };
 
-        // Supabaseへチャンネル設定を保存
         const saveChannelSettings = async () => {
+          if (!supabaseClient) {
+            alert('SupabaseのURLとAPIキーが未設定です。');
+            return;
+          }
           channelSettingsModal.isSaving = true;
           try {
             const val = channelSettingsModal.inputUrl.trim();
-            const { error } = await supabase
+            const { error } = await supabaseClient
               .from('app_settings')
               .upsert({ key: 'channel_url', value: val });
 
@@ -695,7 +722,6 @@
           }
         });
 
-        // Fisher-Yates アルゴリズムによるランダムシャッフル
         const shuffleArray = (array) => {
           const arr = [...array];
           for (let i = arr.length - 1; i > 0; i--) {
@@ -868,21 +894,21 @@
             : `${processed}${autoHeightScript}`;
         };
 
-        // ==========================================================
-        // 3. Supabase からのデータ取得
-        // ==========================================================
         const loadData = async () => {
+          if (!supabaseClient) {
+            isLoading.value = false;
+            return;
+          }
+
           isLoading.value = true;
           try {
-            // videos テーブルから全件取得
-            const { data: videoData, error: videoError } = await supabase
+            const { data: videoData, error: videoError } = await supabaseClient
               .from('videos')
               .select('*')
               .order('updated_at', { ascending: false });
 
             if (videoError) throw videoError;
 
-            // スネークケース（DB）からキャメルケース（Vue）へマッピング
             items.value = (videoData || []).map(row => ({
               slug: row.slug,
               youtubeId: row.youtube_id,
@@ -892,8 +918,7 @@
               updatedAt: row.updated_at
             }));
 
-            // app_settings テーブルからチャンネル登録URLを取得
-            const { data: settingData, error: settingError } = await supabase
+            const { data: settingData, error: settingError } = await supabaseClient
               .from('app_settings')
               .select('value')
               .eq('key', 'channel_url')
@@ -956,10 +981,12 @@
           }
         };
 
-        // ==========================================================
-        // 4. Supabase への保存・更新（Upsert）
-        // ==========================================================
         const saveItem = async () => {
+          if (!supabaseClient) {
+            alert('Supabaseが未設定です。コード上部のURLとKEYを設定してください。');
+            return;
+          }
+
           const ytId = extractYouTubeId(modal.form.youtubeInput);
           if (!ytId || ytId.length !== 11) {
             alert('有効なYouTube URLまたは11桁の動画IDを入力してください。');
@@ -988,7 +1015,7 @@
 
           modal.isSubmitting = true;
           try {
-            const { error } = await supabase
+            const { error } = await supabaseClient
               .from('videos')
               .upsert(dbPayload);
 
@@ -1003,13 +1030,12 @@
           }
         };
 
-        // ==========================================================
-        // 5. Supabase からの削除
-        // ==========================================================
         const confirmDelete = async (slug) => {
+          if (!supabaseClient) return;
+
           if (confirm('本当にこの動画ページを削除しますか？')) {
             try {
-              const { error } = await supabase
+              const { error } = await supabaseClient
                 .from('videos')
                 .delete()
                 .eq('slug', slug);
@@ -1076,6 +1102,7 @@
         });
 
         return {
+          configError,
           subscribeUrl,
           channelSettingsModal,
           openChannelSettingsModal,
